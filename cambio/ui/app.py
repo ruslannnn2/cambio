@@ -15,7 +15,7 @@ class App:
     def __init__(self, bots=2, level="medium", autostart=False):
         pygame.init()
         pygame.display.set_caption("Cambio")
-        self.window = pygame.display.set_mode(WINDOW_SIZE, pygame.RESIZABLE, vsync=1)
+        self.window = pygame.display.set_mode(WINDOW_SIZE, pygame.RESIZABLE)
         self.canvas = pygame.Surface((LOGICAL_W, LOGICAL_H)).convert()
         self.clock = pygame.time.Clock()
         self.atlas = Atlas()

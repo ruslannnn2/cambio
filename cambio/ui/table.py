@@ -8,6 +8,7 @@ import time
 import pygame
 
 from .. import actions as A
+from ..names import BOT_NAMES
 from .. import bot as bot_module
 from ..bot import Bot
 from ..cards import SUITS, Card, card_from_id
@@ -36,14 +37,6 @@ GOOD = (120, 230, 150)
 PANEL = (14, 24, 26)
 
 
-def name(pid: int) -> str:
-    return "YOU" if pid == 0 else f"BOT {pid}"
-
-
-def poss(pid: int) -> str:
-    return "YOUR" if pid == 0 else f"BOT {pid}'S"
-
-
 class Button:
     def __init__(self, key, label, rect, color=CREAM, text=INK):
         self.key, self.label, self.rect, self.color, self.text = key, label, pygame.Rect(rect), color, text
@@ -65,6 +58,7 @@ class GameScene:
         self.g = Game(self.n, seed)
         self.rng = random.Random(seed)
         self.bots = {p: Bot(p, level, self.rng) for p in range(1, self.n)}
+        self.names = {0: "YOU", **dict(zip(self.bots, self.rng.sample(BOT_NAMES, len(self.bots))))}
         self.sprites: dict[int, CardSprite] = {}
         self.draw_ids: list[int] = []
         self.reveal: dict[int, float] = {}
@@ -90,6 +84,12 @@ class GameScene:
     # ------------------------------------------------------------- layout
     def seat_center(self, pid):
         return HUMAN_CENTER if pid == 0 else BOT_SEATS[self.n_bots][pid - 1]
+
+    def name(self, pid: int) -> str:
+        return self.names.get(pid, "TABLE").upper()  # pid -1 = events with no player (reshuffle, game over)
+
+    def poss(self, pid: int) -> str:
+        return "YOUR" if pid == 0 else f"{self.name(pid)}'S"
 
     def slot_pos(self, owner, slot):
         cx, cy = self.seat_center(owner)
@@ -343,7 +343,7 @@ class GameScene:
             ev = g.events[self.event_idx]
             self.event_idx += 1
             k, d, p = ev.kind, ev.data, ev.pid
-            n = name(p)
+            n = self.name(p)
             if k == "draw":
                 self.say(f"{n} DREW A CARD", p)
             elif k == "take_discard":
@@ -358,12 +358,12 @@ class GameScene:
                 own = d["owner"] == p
                 if p == 0:
                     self.reveal[d["card"].id] = SHOW_TIME
-                    self.say(f"YOU SAW {d['card']} ({'YOUR' if own else poss(d['owner'])} CARD)", 0)
+                    self.say(f"YOU SAW {d['card']} ({'YOUR' if own else self.poss(d['owner'])} CARD)", 0)
                 else:
-                    self.say(f"{n} PEEKED AT {'THEIR OWN' if own else poss(d['owner'])} CARD", p)
+                    self.say(f"{n} PEEKED AT {'THEIR OWN' if own else self.poss(d['owner'])} CARD", p)
                 self.flash[(d["owner"], d["slot"])] = 1.0
             elif k == "blind_swap":
-                self.say(f"{n} BLIND-SWAPPED {poss(d['a'][0])} AND {poss(d['b'][0])} CARDS", p)
+                self.say(f"{n} BLIND-SWAPPED {self.poss(d['a'][0])} AND {self.poss(d['b'][0])} CARDS", p)
                 self.flash[d["a"]] = self.flash[d["b"]] = 1.0
             elif k == "queen_look":
                 if p == 0:
@@ -389,12 +389,12 @@ class GameScene:
                 if o == p:
                     self.say(f"{n} JUMPED IN WITH {d['card']}!", p)
                 else:
-                    self.say(f"{n} JUMPED IN WITH {poss(o)} {d['card']}! {name(o)} +2 CARDS", p)
+                    self.say(f"{n} JUMPED IN WITH {self.poss(o)} {d['card']}! {self.name(o)} +2 CARDS", p)
                 self.jump_timers.clear()
                 self.toast("JUMP-IN!", GOOD, self.slot_pos(o, d["slot"]) if o < self.n else (240, 150))
             elif k == "jump_fail":
                 o = d["owner"]
-                whose = "" if o == p else f"{poss(o)} "
+                whose = "" if o == p else f"{self.poss(o)} "
                 self.say(f"{n} MISJUMPED {whose}{d['card']}! +1 CARD", p)
                 if not d["replaced"]:
                     self.reveal[d["card"].id] = 2.6
@@ -509,7 +509,7 @@ class GameScene:
                 Phase.QUEEN_DECIDE: "SWAP THE TWO CARDS YOU JUST SAW?",
             }[ph]
         dots = "." * (int(self.t * 3) % 4)
-        who = name(g.current)
+        who = self.name(g.current)
         if g.phase == Phase.HOLDING:
             return f"{who} IS HOLDING A CARD{dots}"
         if g.phase == Phase.DRAW:
@@ -536,6 +536,16 @@ class GameScene:
         if g.jump_open and g.phase not in (Phase.PEEK, Phase.GAME_OVER):
             draw_text(surf, "JUMP!", (DISCARD_POS[0], 166), GOLD, 1, INK, "center")
 
+    def draw_turn_glow(self, surf, cx, cy, w):
+        """A pulsing gold frame behind the active player's whole hand."""
+        pulse = 0.5 + 0.5 * math.sin(self.t * 5)
+        r = pygame.Rect(0, 0, int(w + 9), int(2 * CARD_H + GAP + 9))
+        r.center = (int(cx), int(cy))
+        glow = pygame.Surface(r.size, pygame.SRCALPHA)
+        pygame.draw.rect(glow, (*GOLD, int(34 + 30 * pulse)), glow.get_rect(), border_radius=7)
+        pygame.draw.rect(glow, (*GOLD, int(150 + 100 * pulse)), glow.get_rect(), 2, border_radius=7)
+        surf.blit(glow, r)
+
     def draw_seats(self, surf):
         g = self.g
         over = g.phase == Phase.GAME_OVER
@@ -545,23 +555,35 @@ class GameScene:
             cx, cy = self.seat_center(pid)
             cols = max(2, math.ceil(len(g.hands[pid]) / 2))
             w = cols * (CARD_W + GAP) - GAP
-            label = name(pid)
+            label = self.name(pid)
             if over:
                 label += f" {scores[pid]}"
-            col = GOLD if (g.current == pid and not over) or (over and pid in winners) else WHITE
+            active = g.current == pid and not over and g.phase != Phase.PEEK
+            won = over and pid in winners
+            col = INK if active else (GOLD if won else (175, 195, 188))
             if pid == 0:
                 x, y = cx - w / 2 - 7, cy - 3
-                draw_text(surf, label, (x, y), col, 1 + over, INK, "right")
+                lx, ly, align = x, y, "right"
             else:
-                y = cy - CARD_H - GAP / 2 - 8
-                draw_text(surf, label, (cx, y - (2 if over else 0)), col, 1 + over, INK, "center")
-            if g.current == pid and not over and g.phase != Phase.PEEK:
+                lx, ly, align = cx, cy - CARD_H - GAP / 2 - 8 - (2 if over else 0), "center"
+            scale = 1 + over
+            if active:
+                ly = max(ly, 4)  # keep the name tab on screen for the seat at the top edge
+                self.draw_turn_glow(surf, cx, cy, w)
+                tw = text_width(label, scale)
+                px = lx - tw if align == "right" else lx - tw // 2
+                pill = pygame.Rect(int(px) - 4, int(ly) - 3, tw + 8, 5 * scale + 6)
+                pygame.draw.rect(surf, INK, pill.inflate(2, 2), border_radius=3)
+                pygame.draw.rect(surf, GOLD, pill, border_radius=3)
+            draw_text(surf, label, (lx, ly), col, scale, None if active else INK, align)
+            if active and ly >= 12:  # (the top seat has no room for the arrow)
                 bob = int(math.sin(self.t * 6) * 1.5)
-                tx = cx if pid else cx - w / 2 - 7 - text_width(label) / 2
-                ty = (cy - CARD_H - GAP / 2 - 13 if pid else cy - 11) + bob
-                pygame.draw.polygon(surf, GOLD, [(tx - 3, ty), (tx + 3, ty), (tx, ty + 4)])
+                tx = lx - text_width(label) / 2 if align == "right" else lx
+                ty = ly - 10 + bob
+                pygame.draw.polygon(surf, INK, [(tx - 5, ty - 1), (tx + 5, ty - 1), (tx, ty + 6)])
+                pygame.draw.polygon(surf, GOLD, [(tx - 4, ty), (tx + 4, ty), (tx, ty + 5)])
         if g.cambio_caller is not None and not over:
-            draw_text(surf, f"{name(g.cambio_caller)} CALLED CAMBIO", (6, 6), GOLD, 1, INK)
+            draw_text(surf, f"{self.name(g.cambio_caller)} CALLED CAMBIO", (6, 6), GOLD, 1, INK)
 
     def draw_log(self, surf):
         x0, y0, w, h = 292, 184, 184, 82
@@ -586,7 +608,7 @@ class GameScene:
                    and g.hands[fs[0]][fs[1]] is sp.card)
             sp.draw(world, atlas, self.t, self.mouse, hov, idle=False)
         if g.held is not None:
-            who = name(g.current)
+            who = self.name(g.current)
             draw_text(world, f"{who} HOLD{'' if g.current == 0 else 'S'}", (HOLD_POS[0], 108), WHITE, 1, INK, "center")
             if g.held_from == "discard":
                 draw_text(world, "FROM PILE", (HOLD_POS[0], 166), (180, 220, 200), 1, INK, "center")
@@ -638,7 +660,7 @@ class GameScene:
         elif 0 in w:
             text, col = "YOU TIE!", GOLD
         elif len(w) == 1:
-            text, col = f"BOT {w[0]} WINS", RED
+            text, col = f"{self.name(w[0]).upper()} WINS", RED
         else:
             text, col = "BOTS TIE", RED
         pygame.draw.rect(surf, PANEL, (130, 118, 220, 30), border_radius=4)

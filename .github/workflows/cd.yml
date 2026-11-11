@@ -1,0 +1,57 @@
+name: CD
+
+on:
+  pull_request_target:
+    types: [closed]
+
+jobs:
+  bundle:
+    #we need to skip all non "Release: v#.#.#" prs
+    if: >-
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.base.ref == 'main' &&
+      startsWith(github.event.pull_request.title, 'Release: v')
+    strategy:
+      #we build for x86 and arm linux
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+        #I initially wanted to do nix bundle but it just didnt work unless I passsed in 
+        #x11 as the video driver, and i dont wanna do that every time. it also made the
+        #executable almost a gig
+      - run: python -m pip install . pyinstaller
+      - run: python -m PyInstaller --onefile --name "cambio-${{ matrix.runner }}" main.py
+      - uses: actions/upload-artifact@v6
+        with:
+          name: cambio-${{ matrix.runner }}
+          path: dist/cambio-${{ matrix.runner }}
+
+  #this is the job that actually makes the release note
+  release:
+    needs: bundle
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+      - uses: actions/download-artifact@v6
+        with:
+          pattern: cambio-*
+          path: bundles
+          merge-multiple: true
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          pr_title: ${{ github.event.pull_request.title }}
+          release_sha: ${{ github.event.pull_request.merge_commit_sha }}
+        #use the Release: v#.#.# PR title as the tag
+        run: 'gh release create "${pr_title#Release: }" bundles/* --target "$release_sha" --generate-notes'

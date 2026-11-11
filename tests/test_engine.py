@@ -270,3 +270,16 @@ def test_bot_games_finish_and_conserve_cards(n):
         cards = g.all_cards()
         assert len(cards) == 52 and len({c.id for c in cards}) == 52
         assert g.phase == Phase.GAME_OVER
+
+
+def test_bot_never_jumps_in_with_its_own_red_king():
+    from cambio.bot import Bot
+    g = Game(2, seed=6)
+    rig(g, [hand("2S", "3S", "4S", "5S"), hand("KH", "7H", "8H", "9H")], top=C("KS"), draw=[C("AD")])
+    g.jump_open = True
+    g.known[1].update(c.id for c in g.hands[1])      # the bot remembers all of its own cards
+    assert Bot(1, "hard").wants_jump(g.view(1)) is None
+    g.known[1].update(c.id for c in g.hands[0])
+    g.hands[0][0] = C("KC")                          # but a black king of ours is fair game
+    g.known[1].add(C("KC").id)
+    assert Bot(1, "hard").wants_jump(g.view(1)) == (0, 0)

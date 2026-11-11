@@ -64,7 +64,8 @@ class Bot:
             return None
         top = v.discard[-1]
         hits = [pos for pos, c in self._mem(v).items()
-                if c.rank == top.rank and pos[0] != v.cambio_caller and v.occupied[pos[0]][pos[1]]]
+                if c.rank == top.rank and pos[0] != v.cambio_caller and v.occupied[pos[0]][pos[1]]
+                and not (pos[0] == self.pid and c.value < 0)]  # never throw away our own red king (-1)
         hits.sort(key=lambda p: p[0] != self.pid)
         return hits[0] if hits else None
 

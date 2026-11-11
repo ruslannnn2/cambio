@@ -167,3 +167,28 @@ def test_felt_stays_opaque_over_a_full_cycle(gfx):
         surf.fill((0, 0, 0))
         felt.draw(surf)
         assert surf.get_at((240, 135))[1] > 60, "felt turned dark (stale alpha)"
+
+
+def test_bots_get_unique_random_names(gfx):
+    from cambio.names import BOT_NAMES
+    s = GameScene(FakeApp(), 4, "medium", seed=5)
+    bots = [s.name(p) for p in range(1, 5)]
+    assert s.name(0) == "YOU" and s.poss(0) == "YOUR"
+    assert len(set(bots)) == 4 and all(b in BOT_NAMES for b in bots)
+    assert s.poss(1) == f"{bots[0]}'S"
+    assert bots == [GameScene(FakeApp(), 4, "medium", seed=5).name(p) for p in range(1, 5)]  # seeded = repeatable
+    assert all(set(n) <= set("ABCDEFGHIJKLMNOPQRSTUVWXYZ") for n in BOT_NAMES)  # the pixel font's alphabet
+
+
+def test_game_over_and_reshuffle_events_render(gfx):
+    screen, atlas, felt = gfx
+    s = GameScene(FakeApp(), 2, "medium", seed=3)
+    advance(s, felt, 2)
+    s.on_button("ready")
+    s.g.deck.draw_pile.clear()                       # force a reshuffle on the next draw
+    s.g.deck.discard.extend(s.g.deck.draw_pile or [])
+    s.g._emit("reshuffle")
+    s.g._end_game()                                  # events with no player (pid -1) must not crash
+    advance(s, felt, 1)
+    s.draw(screen, atlas, felt)
+    assert s.name(-1) == "TABLE"

@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cambio"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = ["pygame-ce>=2.5"]
+
+[project.scripts]
+cambio = "main:main"
+
+[tool.setuptools]
+py-modules = ["main"]
+packages = ["cambio", "cambio.ui"]
+
+# this is so users don't have to install pytest
+# just to play the game
+[project.optional-dependencies]
+test = ["pytest"]

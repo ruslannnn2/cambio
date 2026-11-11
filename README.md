@@ -1,6 +1,6 @@
 # Cambio
 
-Cambio card game vs 1-4 bots, made with pygame.
+Cambio card game vs 1-4 bots. (definitely not stolen balatro ui)
 
 ## Run
 
@@ -16,7 +16,6 @@ Options: `--bots 1-4`, `--difficulty easy|medium|hard`, `--start` (skip the menu
 
 - Left click: deck, discard pile, cards
 - Jump in (your cards or opponents'): right click, shift-click, or hover + space
-- Rules: RULES on the main menu (or press R) and in the pause menu
 - Esc: pause (press again to resume, or go back to the menu)
 - F11: fullscreen
 
@@ -29,3 +28,7 @@ Options: `--bots 1-4`, `--difficulty easy|medium|hard`, `--start` (skip the menu
 - You can also jump in with an opponent's card: if you're right they take a penalty card, if wrong you do (and bots can do it to you)
 - Call Cambio to end the game after everyone gets one more turn. Lowest score wins
 
+## Tweaking
+- `cambio/names.py`: `BOT_NAMES`, the pool bots are named from
+- `cambio/bot.py`: `BOT_SLEEP`, an extra pause before each bot move
+- `cambio/ui/table.py`: `BOT_ANIM_SPEED`, card animation speed during bot turns
